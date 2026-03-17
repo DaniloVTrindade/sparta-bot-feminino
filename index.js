@@ -1,4 +1,20 @@
-const { Client, LocalAuth } = require('whatsapp-web.js'); 
+// =========================
+// KEEP-ALIVE SERVER (Render exige porta)
+// =========================
+const express = require('express');
+const app = express();
+
+app.get("/", (req, res) => {
+    res.send("Bot Sparta rodando!");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
+// =========================
+// IMPORTS E CONFIGURAÇÕES DO BOT
+// =========================
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
 const BOT_START_TIME = Math.floor(Date.now() / 1000);
@@ -6,7 +22,6 @@ const prefix = "!";
 
 const raidControl = {};
 const flood = {};
-const groupMuted = {}; // para controlar grupos "privados"
 
 process.on("unhandledRejection", (reason) => {
     console.log("⚠️ ERRO NÃO TRATADO:", reason);
@@ -19,11 +34,15 @@ process.on("uncaughtException", (error) => {
 console.clear();
 console.log("⚙️ Iniciando BOT SPARTA...");
 
+// =========================
+// CLIENTE WHATSAPP
+// =========================
 const client = new Client({
-    authStrategy: new LocalAuth({ clientId: "feminino" }),
+    authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: ["--no-sandbox","--disable-setuid-sandbox"]
+        args: ["--no-sandbox", "--disable-setuid-sandbox"]
+        // <<< sem executablePath, Puppeteer vai usar Chromium bundle
     }
 });
 
@@ -37,9 +56,8 @@ client.on('ready', () => {
 });
 
 // =========================
-// BOAS VINDAS + ANTI RAID
+// BOAS-VINDAS + ANTI RAID
 // =========================
-
 client.on('group_join', async (notification) => {
     const chat = await notification.getChat();
     const user = notification.id.participant;
@@ -55,81 +73,79 @@ client.on('group_join', async (notification) => {
 
     if(raidControl[chat.id._serialized].length >= 5){
         await chat.sendMessage(
-`🚨 *ALERTA DE RAID DETECTADO*  
+`🚨 *ALERTA DE RAID*
 
-Muitos usuários entraram rapidamente.  
-Administradores, por favor, verifiquem o grupo.`
+Muitos usuários entraram em pouco tempo.
+
+Administradoras verifiquem o grupo.`
         );
         console.log("🚨 POSSÍVEL RAID DETECTADO");
         return;
     }
 
     await chat.sendMessage(
-`🌸 Olá, @${user.split("@")[0]}!  
+`👋 @${user.split("@")[0]}
 
-Seja muito bem-vindo(a) à *COMUNIDADE SPARTA*! 💖  
+⚔️ *BEM-VINDA À COMUNIDADE SPARTA*
 
-📜 Digite *!regras* para conhecer nossas regras  
-📋 Digite *!menu* para explorar os comandos  
+📜 Digite *!regras*
+📋 Digite *!menu*
 
-Lembre-se: respeito e gentileza acima de tudo 💕`,
+Respeito e disciplina acima de tudo.`,
         { mentions:[user] }
     );
 
-    console.log("👋 Novo membro:",user);
+    console.log("👋 Nova membro:",user);
 });
 
 // =========================
 // SISTEMA DE MENSAGENS
 // =========================
-
 client.on('message_create', async (msg) => {
-
     if(msg.timestamp < BOT_START_TIME) return;
     if(msg.fromMe) return;
 
     const chat = await msg.getChat();
-    if(!chat.isGroup) return; // ignora PV
-
     const sender = msg.author || msg.from;
     const hora = new Date().toLocaleTimeString();
+
     console.log(`📩 ${sender} | ${hora} | ${msg.body}`);
 
     // =========================
     // ANTI FLOOD
     // =========================
-
-    if(!flood[sender]){
-        flood[sender] = {msg:1, time:Date.now()};
-    }else{
-        flood[sender].msg++;
-        if(flood[sender].msg >=5 && Date.now() - flood[sender].time < 5000){
-            await msg.reply("⚠️ Por favor, evite enviar muitas mensagens seguidas.");
-            console.log("🚫 FLOOD:", sender);
-            flood[sender] = {msg:0, time:Date.now()};
-            return;
+    if(chat.isGroup){
+        if(!flood[sender]){
+            flood[sender]={msg:1,time:Date.now()};
+        } else {
+            flood[sender].msg++;
+            if(flood[sender].msg >=5 && Date.now()-flood[sender].time < 5000){
+                await msg.reply("⚠️ Evite flood.");
+                console.log("🚫 FLOOD:",sender);
+                flood[sender]={msg:0,time:Date.now()};
+                return;
+            }
         }
+        setTimeout(()=>{
+            if(flood[sender]) flood[sender].msg=0;
+        },6000);
     }
-
-    setTimeout(()=>{
-        if(flood[sender]) flood[sender].msg=0;
-    }, 6000);
 
     // =========================
     // ANTI LINK
     // =========================
-
-    if(msg.body.includes("http")){
+    if(chat.isGroup && msg.body.includes("http")){
         const participants = chat.participants;
-        const author = participants.find(p => p.id._serialized === msg.author);
+        const author = participants.find(p => p.id._serialized===msg.author);
         if(!author || !author.isAdmin){
             try{
                 await msg.delete(true);
                 await chat.sendMessage(
-`🚫 *LINK REMOVIDO*  
+`🚫 *LINK REMOVIDO*
 
-Links não são permitidos neste grupo 💖`);
-                console.log("🚫 LINK REMOVIDO:", sender);
+Links não são permitidos neste grupo.`
+                );
+                console.log("🚫 LINK REMOVIDO:",sender);
             }catch(e){}
         }
     }
@@ -137,7 +153,6 @@ Links não são permitidos neste grupo 💖`);
     // =========================
     // COMANDOS
     // =========================
-
     if(!msg.body.startsWith(prefix)) return;
 
     const args = msg.body.slice(prefix.length).trim().split(/ +/);
@@ -145,27 +160,17 @@ Links não são permitidos neste grupo 💖`);
     console.log(`⚡ COMANDO: ${comando}`);
 
     // =========================
-    // BLOQUEIO DE MENSAGENS PARA GRUPO PRIVADO
-    // =========================
-    if(groupMuted[chat.id._serialized] && comando !== "desprivar"){
-        const participants = chat.participants;
-        const author = participants.find(p => p.id._serialized === msg.author);
-        if(!author.isAdmin){
-            await msg.delete(true).catch(()=>{});
-            return;
-        }
-    }
-
-    // =========================
     // !OI
     // =========================
     if(comando === "oi"){
         await msg.reply(
-`🌸 Olá!  
+`👋 Olá!
 
-Eu sou o *BOT OFICIAL DA COMUNIDADE SPARTA* 💖  
-Use *!menu* para conhecer todos os comandos.  
-Amor, respeito e alegria sempre! 🌷`
+⚔️ *BOT OFICIAL DA COMUNIDADE SPARTA*
+
+Use *!menu* para ver os comandos.
+
+Disciplina • Respeito • Honra`
         );
     }
 
@@ -174,15 +179,15 @@ Amor, respeito e alegria sempre! 🌷`
     // =========================
     if(comando === "menu"){
         await msg.reply(
-`🌸 *MENU SPARTA* 💕  
+`⚔️ *MENU SPARTA*
 
-👋 !oi  
-📜 !regras  
-🔨 !ban @usuario  
-🔒 !privar  
-🔓 !desprivar  
+👋 !oi
+📜 !regras
+🔨 !ban @usuario
+🔒 !privar
+🔓 !desprivar
 
-Use os comandos com gentileza e responsabilidade. 💖`
+Use os comandos com responsabilidade.`
         );
     }
 
@@ -191,16 +196,16 @@ Use os comandos com gentileza e responsabilidade. 💖`
     // =========================
     if(comando === "regras"){
         await msg.reply(
-`📜 *REGRAS DA COMUNIDADE SPARTA* 💕  
+`📜 *REGRAS DA COMUNIDADE SPARTA*
 
-1️⃣ Proibido conteúdo pornográfico  
-2️⃣ Proibido flood  
-3️⃣ Proibido mensagens ofensivas  
-4️⃣ Proibido figurinhas violentas  
-5️⃣ Proibido desrespeito  
-6️⃣ Proibido conteúdo ilegal  
+1️⃣ Proibido pornografia
+2️⃣ Proibido flood
+3️⃣ Proibido mensagens inadequadas
+4️⃣ Proibido figurinhas violentas
+5️⃣ Proibido desrespeito
+6️⃣ Proibido conteúdo ilegal
 
-⚠️ Quem descumprir será removido(a) do grupo com amor 💖`
+⚠️ Descumprimento resulta em remoção.`
         );
     }
 
@@ -208,62 +213,57 @@ Use os comandos com gentileza e responsabilidade. 💖`
     // !BAN
     // =========================
     if(comando === "ban"){
+        if(!chat.isGroup)
+            return msg.reply("❌ Apenas em grupos.");
 
         const participants = chat.participants;
-        const admin = participants.find(p => p.id._serialized === msg.author);
+        const admin = participants.find(p => p.id._serialized===msg.author);
 
-        if(!admin || !admin.isAdmin){
-            return msg.reply("❌ Apenas administradores do grupo podem banir usuários.");
-        }
+        if(!admin || !admin.isAdmin)
+            return msg.reply("❌ Apenas administradoras podem banir usuários.");
 
         const alvo = msg.mentionedIds[0];
-        if(!alvo) return msg.reply("⚠️ Por favor, marque o usuário que deseja remover.");
+        if(!alvo)
+            return msg.reply("⚠️ Marque a usuária que deseja remover.");
 
-        const target = participants.find(p => p.id._serialized === alvo);
-        if(target && target.isAdmin){
-            return msg.reply("❌ Não é possível banir outro administrador. 💖");
-        }
+        const alvoAdmin = participants.find(p => p.id._serialized === alvo && p.isAdmin);
+        if(alvoAdmin)
+            return msg.reply("❌ Não é possível banir outra administradora.");
 
         try{
             await chat.removeParticipants([alvo]);
             await msg.reply(
-`🔨 *MODERAÇÃO SPARTA* 💕  
+`🔨 *MODERAÇÃO SPARTA*
 
-Usuário removido com sucesso.`);
-            console.log("🔨 BAN:", alvo);
+Usuária removida do grupo.`
+            );
+            console.log("🔨 BAN:",alvo);
         }catch(e){
-            console.log("❌ ERRO BAN:", e);
+            console.log("❌ ERRO BAN:",e);
         }
     }
 
     // =========================
-    // !PRIVAR - só admins falam
+    // !PRIVAR / !DESPRIVAR
     // =========================
     if(comando === "privar"){
-        const participants = chat.participants;
-        const admin = participants.find(p => p.id._serialized === msg.author);
-
-        if(!admin || !admin.isAdmin){
-            return msg.reply("❌ Apenas administradores podem privar o grupo.");
-        }
-
-        groupMuted[chat.id._serialized] = true;
-        await chat.sendMessage("🔒 O grupo agora está *privado*. Apenas administradores podem enviar mensagens 💖");
+        if(!chat.isGroup)
+            return msg.reply("❌ Apenas em grupos.");
+        const admin = chat.participants.find(p => p.id._serialized===msg.author && p.isAdmin);
+        if(!admin)
+            return msg.reply("❌ Apenas administradoras podem usar este comando.");
+        await chat.setMessagesAdminsOnly(true);
+        await msg.reply("🔒 O grupo foi privado, apenas administradoras podem enviar mensagens.");
     }
 
-    // =========================
-    // !DESPRIVAR - todos falam
-    // =========================
     if(comando === "desprivar"){
-        const participants = chat.participants;
-        const admin = participants.find(p => p.id._serialized === msg.author);
-
-        if(!admin || !admin.isAdmin){
-            return msg.reply("❌ Apenas administradores podem liberar o grupo.");
-        }
-
-        groupMuted[chat.id._serialized] = false;
-        await chat.sendMessage("🔓 O grupo voltou a ser *público*. Todos podem enviar mensagens 🌸");
+        if(!chat.isGroup)
+            return msg.reply("❌ Apenas em grupos.");
+        const admin = chat.participants.find(p => p.id._serialized===msg.author && p.isAdmin);
+        if(!admin)
+            return msg.reply("❌ Apenas administradoras podem usar este comando.");
+        await chat.setMessagesAdminsOnly(false);
+        await msg.reply("🔓 O grupo foi desprivado, todas podem enviar mensagens novamente.");
     }
 
 });
