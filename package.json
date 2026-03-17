@@ -1,0 +1,13 @@
+{
+  "name": "sparta-bot-feminino",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "*",
+    "qrcode-terminal": "*",
+    "express": "*"
+  }
+}
