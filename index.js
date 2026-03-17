@@ -16,6 +16,9 @@ app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 // =========================
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const puppeteer = require('puppeteer');
+
+process.env.PUPPETEER_EXECUTABLE_PATH = puppeteer.executablePath();
 
 const BOT_START_TIME = Math.floor(Date.now() / 1000);
 const prefix = "!";
