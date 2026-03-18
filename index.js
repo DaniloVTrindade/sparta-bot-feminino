@@ -10,6 +10,7 @@ app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const puppeteer = require('puppeteer');
 
 process.env.PUPPETEER_EXECUTABLE_PATH = puppeteer.executablePath();
@@ -42,8 +43,13 @@ const client = new Client({
     }
 });
 
-client.on('qr', (qr) => {
-    qrcode.generate(qr, { small: true });
+client.on('qr', async (qr) => {
+    console.log('Gerando QR Code...');
+
+    const qrImage = await QRCode.toDataURL(qr);
+
+    console.log('COPIE ESSE LINK E ABRA NO NAVEGADOR:');
+    console.log(qrImage);
 });
 
 client.on('ready', () => {
