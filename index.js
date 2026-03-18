@@ -43,10 +43,7 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    const qrBase64 = Buffer.from(qr).toString('base64');
-
-    console.log('ABRA ESSE LINK NO NAVEGADOR:');
-    console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qr}`);
+    qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
