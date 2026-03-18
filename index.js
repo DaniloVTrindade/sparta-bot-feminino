@@ -44,11 +44,7 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log('COPIE ESSE TEXTO E COLE NO NAVEGADOR:');
-
-    const qrUrl = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(qr)}`;
-
-    console.log(qrUrl);
+    qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
