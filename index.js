@@ -15,7 +15,10 @@ app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 // IMPORTS E CONFIGURAÇÕES DO BOT
 // =========================
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+client.on('qr', qr => {
+    console.log('QR Code:');
+    console.log('https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + qr);
+});
 const puppeteer = require('puppeteer');
 
 process.env.PUPPETEER_EXECUTABLE_PATH = puppeteer.executablePath();
