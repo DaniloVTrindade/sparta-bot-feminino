@@ -1,6 +1,3 @@
-// =========================
-// KEEP-ALIVE SERVER (Render exige porta)
-// =========================
 const express = require('express');
 const app = express();
 
@@ -11,9 +8,6 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 
-// =========================
-// IMPORTS E CONFIGURAÇÕES DO BOT
-// =========================
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const puppeteer = require('puppeteer');
@@ -50,8 +44,11 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log("📱 Escaneie o QR Code");
-    qrcode.generate(qr,{small:true});
+    console.log('COPIE ESSE TEXTO E COLE NO NAVEGADOR:');
+
+    const qrUrl = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(qr)}`;
+
+    console.log(qrUrl);
 });
 
 client.on('ready', () => {
