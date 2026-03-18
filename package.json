@@ -5,10 +5,15 @@
   "scripts": {
     "start": "node index.js"
   },
+
   "dependencies": {
     "express": "*",
     "puppeteer": "^24.5.0",
     "qrcode-terminal": "*",
     "whatsapp-web.js": "*"
+  },
+
+  "engines": {
+    "node": "18.x"
   }
 }
