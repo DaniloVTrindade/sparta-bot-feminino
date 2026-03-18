@@ -39,12 +39,14 @@ const client = new Client({
     puppeteer: {
         headless: true,
         args: ["--no-sandbox", "--disable-setuid-sandbox"]
-        // <<< sem executablePath, Puppeteer vai usar Chromium bundle
     }
 });
 
 client.on('qr', (qr) => {
-    qrcode.generate(qr, { small: true });
+    const qrBase64 = Buffer.from(qr).toString('base64');
+
+    console.log('ABRA ESSE LINK NO NAVEGADOR:');
+    console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qr}`);
 });
 
 client.on('ready', () => {
