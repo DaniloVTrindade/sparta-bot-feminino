@@ -52,17 +52,13 @@ async function initBot() {
         // =========================
         sock.ev.on("connection.update", (update) => {
             const { connection, lastDisconnect, qr } = update;
-
-            if (qr) {
-                console.log("📲 Gerando QR code...");
-                QRCode.toFile("./qrcode.png", qr, { type: "png" })
-                    .then(() =>
-                        console.log(
-                            "✅ QR code gerado em qrcode.png. Baixe pelo painel do Railway e escaneie no WhatsApp."
-                        )
-                    )
-                    .catch(err => console.error("Erro QR:", err));
-            }
+          
+            // Dentro de sock.ev.on('connection.update', ...)
+if (qr) {
+    console.log("📲 Escaneie este QR code no WhatsApp:");
+    const qrcodeTerminal = require("qrcode-terminal"); // adicione no topo se quiser
+    qrcodeTerminal.generate(qr, { small: true });
+}
 
             if (connection === "open") console.log("⚔️ BOT SPARTA ONLINE");
 
