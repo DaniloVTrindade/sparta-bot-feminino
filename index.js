@@ -7,6 +7,7 @@ process.on("uncaughtException", (err) => console.log("⚠️ EXCEÇÃO:", err));
 // Importações ESM
 import fs from "fs";
 import pino from "pino";
+import qrcodeTerminal from "qrcode-terminal";
 import QRCode from "qrcode";
 
 const BOT_START_TIME = Math.floor(Date.now() / 1000);
@@ -50,12 +51,11 @@ async function initBot() {
         // =========================
         // Conexão
         // =========================
-        sock.ev.on("connection.update", async (update) => {
+       sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
         console.log("📲 Escaneie este QR code no WhatsApp:");
-        const { default: qrcodeTerminal } = await import("qrcode-terminal");
         qrcodeTerminal.generate(qr, { small: true });
     }
 
