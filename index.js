@@ -6,10 +6,10 @@ process.on("uncaughtException", (err) => {
     console.log("⚠️ EXCEÇÃO:", err)
 })
 
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
-import pino from 'pino'
-import QRCode from 'qrcode'
-import { fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
+const makeWASocket = require('@whiskeysockets/baileys').default
+const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const pino = require('pino')
+const QRCode = require('qrcode')
 
 const BOT_START_TIME = Math.floor(Date.now() / 1000)
 const prefix = "!"
@@ -42,11 +42,16 @@ async function startBot() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update
 
-       if (qr) {
-    console.log("📲 Escaneie o QR (abrindo no navegador)...")
+      const fs = require('fs')
 
-    QRCode.toString(qr, { type: 'terminal' }, function (err, url) {
-        console.log(url)
+if (qr) {
+    console.log("📲 Gerando QR code...")
+
+    const qrPath = './qrcode.png'
+
+    QRCode.toFile(qrPath, qr, { type: 'png' }, function (err) {
+        if (err) console.error("Erro gerando QR:", err)
+        else console.log("✅ QR code gerado em qrcode.png. Baixe pelo painel do Railway e escaneie no WhatsApp.")
     })
 }
 
@@ -130,22 +135,6 @@ let text = getText(m.message)
         if (!text) return
 
         const isGroup = from.endsWith("@g.us")
-
-        // Anti-raid
-        if (!raidControl[id]) raidControl[id] = []
-
-        raidControl[id].push(agora)
-        raidControl[id] = raidControl[id].filter(t => agora - t < 10000)
-
-        if (raidControl[id].length >= 5) {
-            await sock.sendMessage(id, {
-                text: `🚨 Amores, cuidado! Muitas entradas em pouco tempo 😳
-
-Pode ser raid, fiquem atentas 💖`
-            })
-            console.log("🚨 POSSÍVEL RAID")
-            return
-        }
         
         // =========================
 // ANTI LINK
