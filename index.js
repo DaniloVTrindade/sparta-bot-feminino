@@ -50,27 +50,27 @@ async function initBot() {
         // =========================
         // Conexão
         // =========================
-        sock.ev.on("connection.update", (update) => {
-            const { connection, lastDisconnect, qr } = update;
-          
-            // Dentro de sock.ev.on('connection.update', ...)
-if (qr) {
-    console.log("📲 Escaneie este QR code no WhatsApp:");
-    const qrcodeTerminal = require("qrcode-terminal"); // adicione no topo se quiser
-    qrcodeTerminal.generate(qr, { small: true });
-}
+        sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
-            if (connection === "open") console.log("⚔️ BOT SPARTA ONLINE");
+    if (qr) {
+        console.log("📲 Escaneie este QR code no WhatsApp:");
+        const { default: qrcodeTerminal } = await import("qrcode-terminal");
+        qrcodeTerminal.generate(qr, { small: true });
+    }
 
-            if (connection === "close") {
-                console.log("❌ Conexão fechada.");
-                if (lastDisconnect?.error?.output?.statusCode === DisconnectReason.loggedOut) {
-                    console.log("⚠️ Sessão expirada. Apague a pasta /auth e rode novamente.");
-                } else {
-                    console.log("🔄 Reconexão automática será feita pelo Baileys...");
-                }
-            }
-        });
+    if (connection === "open") console.log("⚔️ BOT SPARTA ONLINE");
+
+    if (connection === "close") {
+        console.log("❌ Conexão fechada.");
+        if (lastDisconnect?.error?.output?.statusCode === DisconnectReason.loggedOut) {
+            console.log("⚠️ Sessão expirada. Apague a pasta /auth e rode novamente.");
+        } else {
+            console.log("🔄 Tentando reconectar...");
+            sock.ws?.close(); // força reconexão
+        }
+    }
+});
 
         // =========================
         // Eventos de grupo
