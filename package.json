@@ -1,18 +1,14 @@
 {
   "name": "sparta-bot-feminino",
   "version": "1.0.0",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "*",
-    "puppeteer": "^24.5.0",
-    "qrcode": "^1.5.4",
-    "qrcode-terminal": "*",
-    "whatsapp-web.js": "*"
-  },
-  "engines": {
-    "node": "18.x"
+    "@whiskeysockets/baileys": "*",
+    "pino": "*",
+    "qrcode": "^1.5.4"
   }
 }

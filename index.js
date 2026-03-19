@@ -1,266 +1,312 @@
-const express = require('express');
-const app = express();
+process.on("unhandledRejection", (err) => {
+    console.log("⚠️ ERRO:", err)
+})
 
-app.get("/", (req, res) => {
-    res.send("Bot Sparta rodando!");
-});
+process.on("uncaughtException", (err) => {
+    console.log("⚠️ EXCEÇÃO:", err)
+})
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+import pino from 'pino'
+import QRCode from 'qrcode'
+import { fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const puppeteer = require('puppeteer');
+const BOT_START_TIME = Math.floor(Date.now() / 1000)
+const prefix = "!"
 
-process.env.PUPPETEER_EXECUTABLE_PATH = puppeteer.executablePath();
+const raidControl = {}
+const flood = {}
+async function isAdmin(sock, groupId, userId) {
+    const metadata = await sock.groupMetadata(groupId)
+    const user = metadata.participants.find(p => p.id === userId)
+    return user?.admin === "admin" || user?.admin === "superadmin"
+}
 
-const BOT_START_TIME = Math.floor(Date.now() / 1000);
-const prefix = "!";
+console.clear()
+console.log("⚙️ Iniciando BOT SPARTA...")
 
-const raidControl = {};
-const flood = {};
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('./auth')
 
-process.on("unhandledRejection", (reason) => {
-    console.log("⚠️ ERRO NÃO TRATADO:", reason);
-});
+    const { version } = await fetchLatestBaileysVersion()
 
-process.on("uncaughtException", (error) => {
-    console.log("⚠️ EXCEÇÃO:", error);
-});
+    const sock = makeWASocket({
+    auth: state,
+    version,
+    logger: pino({ level: 'silent' }),
+    browser: ["SPARTA BOT", "Chrome", "1.0"]
+})
 
-console.clear();
-console.log("⚙️ Iniciando BOT SPARTA...");
+    sock.ev.on('creds.update', saveCreds)
 
-// =========================
-// CLIENTE WHATSAPP
-// =========================
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update
+
+       if (qr) {
+    console.log("📲 Escaneie o QR (abrindo no navegador)...")
+
+    QRCode.toString(qr, { type: 'terminal' }, function (err, url) {
+        console.log(url)
+    })
+}
+
+        if (connection === 'open') {
+            console.log("⚔️ BOT SPARTA ONLINE")
+        }
+
+        if (connection === 'close') {
+    console.log("❌ Conexão fechada.")
+
+    if (lastDisconnect?.error?.output?.statusCode === DisconnectReason.loggedOut) {
+        console.log("⚠️ Sessão expirada. Apague a pasta /auth e rode novamente.")
+    } else {
+        console.log("🔄 Tentando reconectar...")
+        setTimeout(startBot, 3000)
     }
-});
+}
+    })
 
-client.on('qr', (qr) => {
-    qrcode.generate(qr, { small: true });
-});
-
-client.on('ready', () => {
-    console.log("⚔️ BOT SPARTA ONLINE");
-});
-
-// =========================
-// BOAS-VINDAS + ANTI RAID
-// =========================
-client.on('group_join', async (notification) => {
-    const chat = await notification.getChat();
-    const user = notification.id.participant;
-    const agora = Date.now();
-
-    if(!raidControl[chat.id._serialized]){
-        raidControl[chat.id._serialized] = [];
-    }
-
-    raidControl[chat.id._serialized].push(agora);
-    raidControl[chat.id._serialized] =
-        raidControl[chat.id._serialized].filter(t => agora - t < 10000);
-
-    if(raidControl[chat.id._serialized].length >= 5){
-        await chat.sendMessage(
-`🚨 *ALERTA DE RAID*
-
-Muitos usuários entraram em pouco tempo.
-
-Administradoras verifiquem o grupo.`
-        );
-        console.log("🚨 POSSÍVEL RAID DETECTADO");
-        return;
-    }
-
-    await chat.sendMessage(
-`👋 @${user.split("@")[0]}
-
-⚔️ *BEM-VINDA À COMUNIDADE SPARTA*
-
-📜 Digite *!regras*
-📋 Digite *!menu*
-
-Respeito e disciplina acima de tudo.`,
-        { mentions:[user] }
-    );
-
-    console.log("👋 Nova membro:",user);
-});
-
-// =========================
-// SISTEMA DE MENSAGENS
-// =========================
-client.on('message_create', async (msg) => {
-    if(msg.timestamp < BOT_START_TIME) return;
-    if(msg.fromMe) return;
-
-    const chat = await msg.getChat();
-    const sender = msg.author || msg.from;
-    const hora = new Date().toLocaleTimeString();
-
-    console.log(`📩 ${sender} | ${hora} | ${msg.body}`);
+    sock.ev.on('group-participants.update', async (update) => {
+    const { id, participants, action } = update
+    const agora = Date.now()
 
     // =========================
-    // ANTI FLOOD
+    // ENTRADA (ADD)
     // =========================
-    if(chat.isGroup){
-        if(!flood[sender]){
-            flood[sender]={msg:1,time:Date.now()};
-        } else {
-            flood[sender].msg++;
-            if(flood[sender].msg >=5 && Date.now()-flood[sender].time < 5000){
-                await msg.reply("⚠️ Evite flood.");
-                console.log("🚫 FLOOD:",sender);
-                flood[sender]={msg:0,time:Date.now()};
-                return;
+    if (action === "add") {
+        const user = participants[0]
+
+        // Anti-raid
+        if (!raidControl[id]) raidControl[id] = []
+        raidControl[id].push(agora)
+        raidControl[id] = raidControl[id].filter(t => agora - t < 10000)
+
+        if (raidControl[id].length >= 5) {
+            await sock.sendMessage(id, {
+                text: `🚨 Amores, cuidado! Muitas entradas em pouco tempo 😳\nPode ser raid, fiquem atentas 💖`
+            })
+            console.log("🚨 POSSÍVEL RAID")
+            return
+        }
+
+        // Boas-vindas (Mita)
+        await sock.sendMessage(id, {
+            text: `👋 Olá @${user.split("@")[0]} 💖\n\nSeja muito bem-vinda ao grupo 😊\n\nEu sou a *Mita* e estou aqui para ajudar a manter tudo organizado ✨\n\n📜 Digite *!regras*\n📋 Digite *!menu*\n\nQualquer dúvida, pode me chamar 🙂`,
+            mentions: [user]
+        })
+
+        console.log("👋 Nova membro:", user)
+    }
+
+    // =========================
+    // SAÍDA (REMOVE)
+    // =========================
+    if (action === "remove") {
+        const user = participants[0]
+        await sock.sendMessage(id, {
+            text: `😢 @${user.split("@")[0]} saiu do grupo.\n\nDesejamos tudo de bom 💖`,
+            mentions: [user]
+        })
+        console.log("👋 Membro saiu:", user)
+    }
+})
+
+    sock.ev.on('messages.upsert', async (msg) => {
+        const m = msg.messages[0]
+        if (!m.message || m.key.fromMe) return
+
+        const from = m.key.remoteJid
+        const sender = m.key.participant || from
+
+        const getText = (msg) => {
+    return msg.conversation ||
+           msg.extendedTextMessage?.text ||
+           msg.imageMessage?.caption ||
+           ""
+}
+
+let text = getText(m.message)
+
+        if (!text) return
+
+        const isGroup = from.endsWith("@g.us")
+
+        // Anti-raid
+        if (!raidControl[id]) raidControl[id] = []
+
+        raidControl[id].push(agora)
+        raidControl[id] = raidControl[id].filter(t => agora - t < 10000)
+
+        if (raidControl[id].length >= 5) {
+            await sock.sendMessage(id, {
+                text: `🚨 Amores, cuidado! Muitas entradas em pouco tempo 😳
+
+Pode ser raid, fiquem atentas 💖`
+            })
+            console.log("🚨 POSSÍVEL RAID")
+            return
+        }
+        
+        // =========================
+// ANTI LINK
+// =========================
+if (isGroup && text.includes("http")) {
+    try {
+        await sock.sendMessage(from, { delete: m.key })
+
+        await sock.sendMessage(from, {
+    text: `🚫 Amore, links não são permitidos aqui viu? 😌
+
+Removi pra manter o grupo organizado 💖`
+})
+
+        console.log("🚫 LINK REMOVIDO:", sender)
+    } catch {}
+    return
+}
+
+        const hora = new Date().toLocaleTimeString()
+
+       console.log(`📩 MSG | ${sender} | ${hora}`)
+console.log(`➡️ ${text}`)
+
+        // =========================
+        // ANTI FLOOD
+        // =========================
+        if (isGroup) {
+            if (!flood[sender]) {
+                flood[sender] = { msg: 1, time: Date.now() }
+            } else {
+                flood[sender].msg++
+                if (flood[sender].msg >= 5 && Date.now() - flood[sender].time < 5000) {
+                    await sock.sendMessage(from, {
+    text: `⚠️ Calmaaa 😅
+
+Tá mandando mensagem rápido demais 😳
+
+Vai com calma aí 💖`
+})
+                    console.log("🚫 FLOOD:", sender)
+                    flood[sender] = { msg: 0, time: Date.now() }
+                    return
+                }
             }
+
+            setTimeout(() => {
+                if (flood[sender]) flood[sender].msg = 0
+            }, 6000)
         }
-        setTimeout(()=>{
-            if(flood[sender]) flood[sender].msg=0;
-        },6000);
+
+        // =========================
+        // COMANDOS
+        // =========================
+        if (!text.startsWith(prefix)) return
+
+        const args = text.slice(prefix.length).trim().split(/ +/)
+        const comando = args.shift().toLowerCase()
+
+        console.log(`⚡ COMANDO: ${comando}`)
+
+        // !oi
+      if (comando === "oi") {
+    await sock.sendMessage(from, {
+        text: `👋 Olá 😊
+
+Eu sou a *Mita* 💖
+
+Estou aqui para ajudar e manter o grupo organizado ✨
+
+Digite *!menu* para ver os comandos disponíveis 🙂`
+    })
+}
+
+        // !menu
+        if (comando === "menu") {
+    await sock.sendMessage(from, {
+        text: `💖 *MENU DA MITA*
+
+👋 !oi → falar comigo
+📜 !regras → ver as regras
+🔨 !ban @usuária → remover alguém
+🔒 !privar → só admins falam
+🔓 !desprivar → liberar geral
+
+Use com responsabilidade, viu? 😌✨`
+    })
+}
+        // !regras
+        if (comando === "regras") {
+    await sock.sendMessage(from, {
+        text: `📜 *REGRINHAS DA MITA* 💖
+
+1️⃣ Nada de conteúdo +18 🚫  
+2️⃣ Sem flood, por favor 🙏  
+3️⃣ Respeito sempre 💅  
+4️⃣ Nada de violência 🚫  
+5️⃣ Sem brigas 😤  
+6️⃣ Nada ilegal ⚠️  
+
+Quem não seguir... eu vou agir 😌🔨`
+    })
+}
+
+        if (comando === "ban") {
+    if (!isGroup) return
+
+    if (!(await isAdmin(sock, from, sender))) {
+        return sock.sendMessage(from, { text: "❌ Apenas administradoras podem usar isso." })
     }
 
-    // =========================
-    // ANTI LINK
-    // =========================
-    if(chat.isGroup && msg.body.includes("http")){
-        const participants = chat.participants;
-        const author = participants.find(p => p.id._serialized===msg.author);
-        if(!author || !author.isAdmin){
-            try{
-                await msg.delete(true);
-                await chat.sendMessage(
-`🚫 *LINK REMOVIDO*
+    const mentioned = m.message.extendedTextMessage?.contextInfo?.mentionedJid
+    const alvo = mentioned?.[0]
 
-Links não são permitidos neste grupo.`
-                );
-                console.log("🚫 LINK REMOVIDO:",sender);
-            }catch(e){}
-        }
+    if (!alvo) {
+        return sock.sendMessage(from, { text: "⚠️ Marque a usuária para remover." })
     }
 
-    // =========================
-    // COMANDOS
-    // =========================
-    if(!msg.body.startsWith(prefix)) return;
+    try {
+        await sock.groupParticipantsUpdate(from, [alvo], "remove")
+       await sock.sendMessage(from, {
+    text: `🔨 Prontinho 💅
 
-    const args = msg.body.slice(prefix.length).trim().split(/ +/);
-    const comando = args.shift().toLowerCase();
-    console.log(`⚡ COMANDO: ${comando}`);
+O usuário foi removido do grupo com sucesso.
 
-    // =========================
-    // !OI
-    // =========================
-    if(comando === "oi"){
-        await msg.reply(
-`👋 Olá!
+Aqui a gente mantém a ordem 😌✨`
+})
+    } catch (e) {
+        console.log("ERRO BAN:", e)
+    }
+}
 
-⚔️ *BOT OFICIAL DA COMUNIDADE SPARTA*
+if (comando === "privar") {
+    if (!isGroup) return
 
-Use *!menu* para ver os comandos.
-
-Disciplina • Respeito • Honra`
-        );
+    if (!(await isAdmin(sock, from, sender))) {
+        return sock.sendMessage(from, { text: "❌ Apenas administradoras." })
     }
 
-    // =========================
-    // !MENU
-    // =========================
-    if(comando === "menu"){
-        await msg.reply(
-`⚔️ *MENU SPARTA*
+    await sock.groupSettingUpdate(from, "announcement")
 
-👋 !oi
-📜 !regras
-🔨 !ban @usuario
-🔒 !privar
-🔓 !desprivar
+    await sock.sendMessage(from, {
+        text: "🔒 Grupo fechado. Só administradoras podem falar agora."
+    })
+}
 
-Use os comandos com responsabilidade.`
-        );
+if (comando === "desprivar") {
+    if (!isGroup) return
+
+    if (!(await isAdmin(sock, from, sender))) {
+        return sock.sendMessage(from, { text: "❌ Apenas administradoras." })
     }
 
-    // =========================
-    // !REGRAS
-    // =========================
-    if(comando === "regras"){
-        await msg.reply(
-`📜 *REGRAS DA COMUNIDADE SPARTA*
+    await sock.groupSettingUpdate(from, "not_announcement")
 
-1️⃣ Proibido pornografia
-2️⃣ Proibido flood
-3️⃣ Proibido mensagens inadequadas
-4️⃣ Proibido figurinhas violentas
-5️⃣ Proibido desrespeito
-6️⃣ Proibido conteúdo ilegal
+    await sock.sendMessage(from, {
+        text: "🔓 Grupo aberto novamente 💖"
+    })
+}
 
-⚠️ Descumprimento resulta em remoção.`
-        );
-    }
+    })
+}
 
-    // =========================
-    // !BAN
-    // =========================
-    if(comando === "ban"){
-        if(!chat.isGroup)
-            return msg.reply("❌ Apenas em grupos.");
-
-        const participants = chat.participants;
-        const admin = participants.find(p => p.id._serialized===msg.author);
-
-        if(!admin || !admin.isAdmin)
-            return msg.reply("❌ Apenas administradoras podem banir usuários.");
-
-        const alvo = msg.mentionedIds[0];
-        if(!alvo)
-            return msg.reply("⚠️ Marque a usuária que deseja remover.");
-
-        const alvoAdmin = participants.find(p => p.id._serialized === alvo && p.isAdmin);
-        if(alvoAdmin)
-            return msg.reply("❌ Não é possível banir outra administradora.");
-
-        try{
-            await chat.removeParticipants([alvo]);
-            await msg.reply(
-`🔨 *MODERAÇÃO SPARTA*
-
-Usuária removida do grupo.`
-            );
-            console.log("🔨 BAN:",alvo);
-        }catch(e){
-            console.log("❌ ERRO BAN:",e);
-        }
-    }
-
-    // =========================
-    // !PRIVAR / !DESPRIVAR
-    // =========================
-    if(comando === "privar"){
-        if(!chat.isGroup)
-            return msg.reply("❌ Apenas em grupos.");
-        const admin = chat.participants.find(p => p.id._serialized===msg.author && p.isAdmin);
-        if(!admin)
-            return msg.reply("❌ Apenas administradoras podem usar este comando.");
-        await chat.setMessagesAdminsOnly(true);
-        await msg.reply("🔒 O grupo foi privado, apenas administradoras podem enviar mensagens.");
-    }
-
-    if(comando === "desprivar"){
-        if(!chat.isGroup)
-            return msg.reply("❌ Apenas em grupos.");
-        const admin = chat.participants.find(p => p.id._serialized===msg.author && p.isAdmin);
-        if(!admin)
-            return msg.reply("❌ Apenas administradoras podem usar este comando.");
-        await chat.setMessagesAdminsOnly(false);
-        await msg.reply("🔓 O grupo foi desprivado, todas podem enviar mensagens novamente.");
-    }
-
-});
-
-client.initialize();
+setTimeout(startBot, 5000)
