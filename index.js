@@ -232,5 +232,5 @@ async function initBot() {
 
     startBot();
 }
-
+// teste deploy Railway
 initBot();
